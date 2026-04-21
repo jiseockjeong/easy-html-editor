@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Table Editor</title>
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family: Arial, "Malgun Gothic", sans-serif; background:#f6f7fb; }
+.container { max-width:1200px; margin:0 auto; padding:0 20px; }
+
+.site-header { background: linear-gradient(135deg,#eef4ff 0%,#f8fbff 100%); border-bottom:1px solid #dde3ea; }
+.site-header .container { padding:32px 20px; }
+.site-title { margin:0 0 10px; font-size:28px; }
+.site-desc { margin:0; color:#4b5563; font-size:14px; }
+
+.layout-section { margin:28px auto; }
+.tool-panel, .content-card { background:#fff; border:1px solid #dde3ea; border-radius:16px; box-shadow:0 8px 24px rgba(0,0,0,0.04); padding:18px; }
+.panel-title { margin:0 0 10px; font-size:18px; }
+.panel-desc { margin:0 0 14px; color:#5a6472; font-size:13px; }
+
+textarea { width:100%; min-height:200px; border:1px solid #cfd6df; border-radius:12px; padding:12px; font-family:Consolas, monospace; }
+
+.button-row { display:flex; gap:10px; margin-top:14px; }
+button { border:0; border-radius:12px; padding:10px 14px; font-size:14px; font-weight:700; background:#2563eb; color:#fff; cursor:pointer; }
+.btn-secondary { background:#16a34a; }
+.btn-light { background:#f59e0b; color:#fff; }
+
+.table-preview { margin-top:16px; padding:16px; border:1px solid #dde3ea; border-radius:12px; background:#fff; }
+.table-preview table { border-collapse:collapse; width:100%; }
+.table-preview td, .table-preview th { border:1px solid #d1d5db; padding:10px; cursor:pointer; }
+.table-preview td:hover, .table-preview th:hover { background:#eef4ff; }
+.table-preview td.active, .table-preview th.active { outline:2px solid #2563eb; background:#eef4ff; }
+
+.floating-editor { position:absolute; background:#fff; border:1px solid #dde3ea; border-radius:14px; padding:12px; box-shadow:0 12px 28px rgba(0,0,0,0.12); display:none; z-index:1000; width:400px; }
+#convertBtn{width: 100%;margin-bottom: 8px;}
+.floating-editor input { width:100%; border:1px solid #cfd6df; border-radius:8px; padding:8px; margin-bottom:8px; }
+
+.toolbar { display:flex; gap:6px; margin-bottom:8px; }
+.toolbar button { flex:1; background:#eef3f8; color:#333; }
+
+.badge-cell {
+  display:inline-block;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+  margin-bottom:6px;
+}
+.badge-th { background:#e0edff; color:#2563eb; }
+.badge-td { background:#dcfce7; color:#16a34a; }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <h1 class="site-title">테이블 HTML 편집기</h1>
+    <p class="site-desc">HTML table을 입력하고 셀을 클릭하여 수정 후 코드로 추출할 수 있습니다.</p>
+  </div>
+</header>
+
+<main class="container layout-section">
+  <section class="tool-panel">
+    <h2 class="panel-title">테이블 입력</h2>
+    <p class="panel-desc">HTML table 코드를 입력 후 미리보기를 눌러주세요.</p>
+
+    <textarea id="htmlInput"></textarea>
+
+    <div class="button-row">
+      <button id="renderBtn">미리보기</button>
+      <button id="copyBtn" class="btn-secondary">코드 복사</button>
+      <button id="resetAllBtn" class="btn-light">수정 초기화</button>
+    </div>
+
+    <div id="preview" class="table-preview"></div>
+  </section>
+
+  <section class="content-card layout-section">
+    <h2 class="panel-title">수정된 코드</h2>
+    <textarea id="output" readonly></textarea>
+  </section>
+</main>
+
+<div class="floating-editor" id="editor">
+  <div id="cellBadge" class="badge-cell"></div>
+  <input type="text" id="textEdit" placeholder="텍스트 수정" />
+  <button id="convertBtn">색상변경</button>
+  <div class="toolbar">
+    <button data-align="left">좌로 정렬</button>
+    <button data-align="center">중앙 정렬</button>
+    <button data-align="right">우로 정렬</button>
+  </div>
+</div>
+
+<script>
+const preview = document.getElementById('preview');
+const editor = document.getElementById('editor');
+const htmlInput = document.getElementById('htmlInput');
+const output = document.getElementById('output');
+const cellBadge = document.getElementById('cellBadge');
+
+let activeCell = null;
+
+function updateOutput() {
+  output.value = preview.innerHTML.trim();
+}
+
+function updateBadge() {
+  if (!activeCell) return;
+
+  if (activeCell.tagName === 'TH') {
+    cellBadge.textContent = 'TH (헤더)';
+    cellBadge.className = 'badge-cell badge-th';
+    convertBtn.style.background = '#16a34a';
+    convertBtn.style.color = '#fff';
+  } else {
+    cellBadge.textContent = 'TD (일반)';
+    cellBadge.className = 'badge-cell badge-td';
+    convertBtn.style.background = '#eef3f8';
+    convertBtn.style.color = '#1f2937';
+  }
+}
+
+function bindCells() {
+  preview.querySelectorAll('td, th').forEach(cell => {
+    cell.onclick = cellClickHandler;
+  });
+}
+
+function cellClickHandler(e) {
+  e.stopPropagation();
+
+  if(activeCell) activeCell.classList.remove('active');
+  activeCell = this;
+  activeCell.classList.add('active');
+
+  const rect = activeCell.getBoundingClientRect();
+  editor.style.top = window.scrollY + rect.bottom + 6 + 'px';
+  editor.style.left = window.scrollX + rect.left + 'px';
+  editor.style.display = 'block';
+
+  textEdit.value = activeCell.innerText;
+  updateBadge();
+}
+
+renderBtn.onclick = () => {
+  preview.innerHTML = htmlInput.value;
+  bindCells();
+  updateOutput();
+};
+
+textEdit.oninput = e => {
+  if(activeCell) {
+    activeCell.innerText = e.target.value;
+    updateOutput();
+  }
+};
+
+convertBtn.onclick = () => {
+  if(!activeCell) return;
+
+  const newCell = document.createElement(activeCell.tagName === 'TD' ? 'th' : 'td');
+  newCell.innerHTML = activeCell.innerHTML;
+
+  [...activeCell.attributes].forEach(attr => {
+    if(attr.name !== 'class') newCell.setAttribute(attr.name, attr.value);
+  });
+
+  activeCell.classList.remove('active');
+  activeCell.replaceWith(newCell);
+
+  bindCells();
+  newCell.click();
+  updateOutput();
+};
+
+editor.querySelectorAll('[data-align]').forEach(btn => {
+  btn.onclick = () => {
+    if(activeCell) {
+      activeCell.style.textAlign = btn.dataset.align;
+      updateOutput();
+    }
+  };
+});
+
+copyBtn.onclick = async () => {
+  await navigator.clipboard.writeText(output.value);
+  copyBtn.innerText = '복사됨!';
+  setTimeout(() => copyBtn.innerText = '코드 복사', 1500);
+};
+
+resetAllBtn.onclick = () => {
+  preview.innerHTML = htmlInput.value;
+  bindCells();
+  updateOutput();
+};
+
+editor.addEventListener('click', e => e.stopPropagation());
+
+window.onclick = () => {
+  editor.style.display = 'none';
+  if(activeCell) activeCell.classList.remove('active');
+};
+</script>
+
+</body>
+</html>
