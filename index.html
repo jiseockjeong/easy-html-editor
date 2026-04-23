@@ -177,6 +177,7 @@
 
     .btn-secondary { background: #16a34a; }
     .btn-light { background: #f59e0b; color: #fff; }
+    .btn-add { background: #7c3aed; color: #fff; }
 
     .table-preview {
       margin-top: 16px;
@@ -187,25 +188,45 @@
       overflow: auto;
     }
 
-    .table-preview table {
+    /* 미리보기 전용 스타일 */
+    #preview table {
       border-collapse: collapse;
-      width: 100%;
+      width: 100% !important;
+      table-layout: fixed;
+      background: #fff;
+      border-left: 1px solid #d7deea;
+      border-top: 1px solid #d7deea;
+      border-radius: 12px;
+      overflow: hidden;
     }
 
-    .table-preview td,
-    .table-preview th {
-      border: 1px solid #d1d5db;
-      padding: 10px;
+    #preview th,
+    #preview td {
+      border-right: 1px solid #dbe2ea;
+      border-bottom: 1px solid #dbe2ea;
+      padding: 12px 10px;
       cursor: pointer;
+      vertical-align: top;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
-    .table-preview td:hover,
-    .table-preview th:hover {
+    #preview th {
+      background: #f3f7ff;
+      font-weight: 700;
+    }
+
+    #preview tr:nth-child(even) td {
+      background: #fcfdff;
+    }
+
+    #preview td:hover,
+    #preview th:hover {
       background: #eef4ff;
     }
 
-    .table-preview td.active,
-    .table-preview th.active {
+    #preview td.active,
+    #preview th.active {
       outline: 2px solid #2563eb;
       background: #eef4ff;
     }
@@ -227,12 +248,16 @@
       margin-bottom: 8px;
     }
 
-    .floating-editor input {
+    .floating-editor textarea {
       width: 100%;
+      min-height: 110px;
       border: 1px solid #cfd6df;
       border-radius: 8px;
       padding: 8px;
       margin-bottom: 8px;
+      resize: vertical;
+      font-family: Consolas, monospace;
+      line-height: 1.5;
     }
 
     .toolbar {
@@ -309,6 +334,16 @@
       line-height: 1.7;
     }
 
+    #preview table {
+  width: 100% !important;
+  table-layout: auto;
+}
+
+#preview th,
+#preview td {
+  min-width: 120px;
+}
+
     @media (max-width: 768px) {
       .floating-editor {
         width: calc(100vw - 32px);
@@ -347,6 +382,8 @@
 
       <div class="button-row">
         <button id="renderBtn" type="button">미리보기</button>
+        <button id="addRowBtn" type="button" class="btn-add">행 추가</button>
+        <button id="addColBtn" type="button" class="btn-add">열 추가</button>
         <button id="copyBtn" type="button" class="btn-secondary">코드 복사</button>
         <button id="resetAllBtn" type="button" class="btn-light">수정 초기화</button>
       </div>
@@ -369,6 +406,7 @@
         <li>HTML table 코드를 입력합니다.</li>
         <li>미리보기 버튼을 눌러 테이블을 렌더링합니다.</li>
         <li>수정할 셀을 클릭해 텍스트, 정렬, th·td 변환을 진행합니다.</li>
+        <li>필요하면 행 추가, 열 추가 버튼으로 구조를 확장합니다.</li>
         <li>수정된 코드를 복사해 원하는 페이지에 붙여넣습니다.</li>
       </ol>
 
@@ -377,6 +415,7 @@
         <li>HTML table 텍스트 수정</li>
         <li>좌측, 중앙, 우측 정렬 변경</li>
         <li>th를 td로, td를 th로 변환</li>
+        <li>행 추가, 열 추가</li>
         <li>수정된 결과 HTML 코드 복사</li>
       </ul>
     </section>
@@ -417,7 +456,7 @@
   <div class="floating-editor" id="editor" role="dialog" aria-label="셀 편집기">
     <div id="cellBadge" class="badge-cell"></div>
     <label class="field-label" for="textEdit">셀 텍스트 수정</label>
-    <input type="text" id="textEdit" placeholder="텍스트 수정" />
+    <textarea id="textEdit" placeholder="텍스트 수정"></textarea>
     <button id="convertBtn" type="button">색상변경</button>
     <div class="toolbar" aria-label="정렬 도구">
       <button type="button" data-align="left">좌로 정렬</button>
@@ -435,6 +474,8 @@
     const textEdit = document.getElementById("textEdit");
     const convertBtn = document.getElementById("convertBtn");
     const renderBtn = document.getElementById("renderBtn");
+    const addRowBtn = document.getElementById("addRowBtn");
+    const addColBtn = document.getElementById("addColBtn");
     const copyBtn = document.getElementById("copyBtn");
     const resetAllBtn = document.getElementById("resetAllBtn");
 
@@ -462,6 +503,10 @@
       }
     }
 
+    function getTable() {
+      return preview.querySelector("table");
+    }
+
     function bindCells() {
       preview.querySelectorAll("td, th").forEach(cell => {
         cell.onclick = cellClickHandler;
@@ -480,19 +525,41 @@
       editor.style.left = window.scrollX + rect.left + "px";
       editor.style.display = "block";
 
-      textEdit.value = activeCell.innerText;
+      textEdit.value = activeCell.textContent;
       updateBadge();
     }
 
-    renderBtn.onclick = () => {
+    function renderTable() {
       preview.innerHTML = htmlInput.value;
+      const table = getTable();
+
+      if (!table) {
+        output.value = "";
+        editor.style.display = "none";
+        activeCell = null;
+        return;
+      }
+
+      table.style.width = "100%";
       bindCells();
       updateOutput();
+    }
+
+    function createCell(tagName, text = "") {
+      const cell = document.createElement(tagName);
+      cell.textContent = text;
+      cell.style.whiteSpace = "pre-wrap";
+      return cell;
+    }
+
+    renderBtn.onclick = () => {
+      renderTable();
     };
 
     textEdit.oninput = e => {
       if (activeCell) {
-        activeCell.innerText = e.target.value;
+        activeCell.textContent = e.target.value;
+        activeCell.style.whiteSpace = "pre-wrap";
         updateOutput();
       }
     };
@@ -507,6 +574,8 @@
         if (attr.name !== "class") newCell.setAttribute(attr.name, attr.value);
       });
 
+      newCell.style.whiteSpace = "pre-wrap";
+
       activeCell.classList.remove("active");
       activeCell.replaceWith(newCell);
 
@@ -519,10 +588,51 @@
       btn.onclick = () => {
         if (activeCell) {
           activeCell.style.textAlign = btn.dataset.align;
+          activeCell.style.whiteSpace = "pre-wrap";
           updateOutput();
         }
       };
     });
+
+    addRowBtn.onclick = () => {
+      const table = getTable();
+      if (!table) return;
+
+      const rows = table.querySelectorAll("tr");
+      if (!rows.length) return;
+
+      const referenceRow = rows[0];
+      const refCells = referenceRow.children;
+      const colCount = refCells.length;
+
+      const tbody = table.querySelector("tbody") || table;
+      const newRow = document.createElement("tr");
+
+      for (let i = 0; i < colCount; i++) {
+        newRow.appendChild(createCell("td", ""));
+      }
+
+      tbody.appendChild(newRow);
+      bindCells();
+      updateOutput();
+    };
+
+    addColBtn.onclick = () => {
+      const table = getTable();
+      if (!table) return;
+
+      const rows = table.querySelectorAll("tr");
+      if (!rows.length) return;
+
+      rows.forEach((row, rowIndex) => {
+        const firstCell = row.children[0];
+        const cellTag = rowIndex === 0 && firstCell && firstCell.tagName === "TH" ? "th" : "td";
+        row.appendChild(createCell(cellTag, ""));
+      });
+
+      bindCells();
+      updateOutput();
+    };
 
     copyBtn.onclick = async () => {
       await navigator.clipboard.writeText(output.value);
@@ -531,9 +641,7 @@
     };
 
     resetAllBtn.onclick = () => {
-      preview.innerHTML = htmlInput.value;
-      bindCells();
-      updateOutput();
+      renderTable();
     };
 
     editor.addEventListener("click", e => e.stopPropagation());
@@ -541,6 +649,7 @@
     window.onclick = () => {
       editor.style.display = "none";
       if (activeCell) activeCell.classList.remove("active");
+      activeCell = null;
     };
   </script>
 </body>
